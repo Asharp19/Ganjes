@@ -26,6 +26,7 @@ contract GanjesToken is ERC20, Ownable {
     function transfer(address recipient, uint256 amount) public virtual override returns (bool) {
         uint256 fee = (amount * transactionFeePercent) / 100;
         uint256 liquidityFee = (fee * liquidityFeePercent) / 100;
+        uint256 burnerFee=(fee * (100-liquidityFeePercent))/100;
         uint256 transferAmount = amount - fee;
 
         super._transfer(_msgSender(), recipient, transferAmount);
