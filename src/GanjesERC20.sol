@@ -13,9 +13,9 @@ contract GanjesToken is ERC20, Ownable {
     uint64 public constant TotalAdvisorVestingShare = 5;
 
     uint64 private constant TEAM_CLIFF_DURATION = 365 days;
-    uint64 private constant TEAM_VESTING_DURATION = 3 * 365 days;
-    uint64 private constant ADVISORS_CLIFF_DURATION = 365 * 0.5 days;
-    uint64 private constant ADVISORS_VESTING_DURATION = 2 * 365 days;
+    uint64 private constant TEAM_VESTING_DURATION =3*365 days;
+    uint64 private constant ADVISORS_CLIFF_DURATION = 0.5 * 365 days;
+    uint64 private constant ADVISORS_VESTING_DURATION =2*365 days;
 
     mapping(address => VestingWallet) public teamVestingWallets;
     mapping(address => VestingWallet) public advisorsVestingWallets;
@@ -39,7 +39,7 @@ contract GanjesToken is ERC20, Ownable {
         uint256 tokensForOwner = (initialSupply * (10**uint256(decimals()))) -
             (tokensForTeam + tokensForAdvisors);
         uint256 teamMembersLength = _teamMembers.length;
-        uint256 advisorsLength = advisors.length;
+        uint256 advisorsLength = _advisors.length;
 
         for (uint256 i = 0; i < teamMembersLength; i++) {
             teamMembers.push(_teamMembers[i]);
@@ -130,7 +130,7 @@ contract GanjesToken is ERC20, Ownable {
     }
 
     function releaseVestedTokens() public payable {
-        address caller = msg.sender;
+        address caller = _msgSender();
         bool isTeamMember = address(teamVestingWallets[caller]) != address(0);
         bool isAdvisor = address(advisorsVestingWallets[caller]) != address(0);
 
@@ -138,10 +138,15 @@ contract GanjesToken is ERC20, Ownable {
         
 
         if (isTeamMember) {
-            teamVestingWallets[caller].release();
-        } else {
+            require(teamVestingWallets[caller].start()<=block.timestamp, "Vesting Hasn't Started");
+            require(teamVestingWallets[caller].releasable(address(this))>0, "No Tokens Left to release");
+            teamVestingWallets[caller].release(address(this));
+        } 
+        if (isAdvisor){
             // isAdvisor must be true here
-            advisorsVestingWallets[caller].release();
+            require(advisorsVestingWallets[caller].start()<=block.timestamp, "Vesting Hasn't Started");
+            require(advisorsVestingWallets[caller].releasable(address(this))>0, "No Tokens Left to release");
+            advisorsVestingWallets[caller].release(address(this));
         }
     }
 
@@ -153,3 +158,4 @@ contract GanjesToken is ERC20, Ownable {
     //     payable(owner()).transfer(amount);
     // }
 }
+
