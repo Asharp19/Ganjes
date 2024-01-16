@@ -7,15 +7,16 @@ import "@openzeppelin/contracts/finance/VestingWallet.sol";
 
 contract GanjesToken is ERC20, Ownable {
     uint64 public transactionFeePercent; // total transaction fee
-    address public liquidityWallet; //liquidityFee wallet
+    address public liquidityWallet;
+    bool public isFeeActive = true; //liquidityFee wallet
     uint64 public constant liquidityFeePercent = 50; // percentage of transaction fee allocated to liquidity
     uint64 public constant TotalTeamVestingShare = 10;
     uint64 public constant TotalAdvisorVestingShare = 5;
 
     uint64 private constant TEAM_CLIFF_DURATION = 365 days;
-    uint64 private constant TEAM_VESTING_DURATION =3*365 days;
+    uint64 private constant TEAM_VESTING_DURATION = 3 * 365 days;
     uint64 private constant ADVISORS_CLIFF_DURATION = 0.5 * 365 days;
-    uint64 private constant ADVISORS_VESTING_DURATION =2*365 days;
+    uint64 private constant ADVISORS_VESTING_DURATION = 2 * 365 days;
 
     mapping(address => VestingWallet) public teamVestingWallets;
     mapping(address => VestingWallet) public advisorsVestingWallets;
@@ -84,6 +85,10 @@ contract GanjesToken is ERC20, Ownable {
     }
 
     function setLiquidityWallet(address newLiquidityWallet) public onlyOwner {
+        require(
+            newLiquidityWallet != address(0),
+            "newLiquidityWallet is the zero address"
+        );
         liquidityWallet = newLiquidityWallet;
     }
 
@@ -93,18 +98,21 @@ contract GanjesToken is ERC20, Ownable {
         override
         returns (bool)
     {
-        uint256 fee = (amount * transactionFeePercent) / 100;
+        uint256 fee = isFeeActive ? (amount * transactionFeePercent) / 100 : 0;
         uint256 liquidityFee = (fee * liquidityFeePercent) / 100;
         uint256 burnerFee = (fee * (100 - liquidityFeePercent)) / 100;
         uint256 transferAmount = amount - fee;
 
         super._transfer(_msgSender(), recipient, transferAmount);
-        if (liquidityFee > 0) {
-            super._transfer(_msgSender(), liquidityWallet, liquidityFee);
+        if (isFeeActive) {
+            if (liquidityFee > 0) {
+                super._transfer(_msgSender(), liquidityWallet, liquidityFee);
+            }
+            if (burnerFee > 0) {
+                super._burn(_msgSender(), burnerFee);
+            }
         }
-        if (burnerFee > 0) {
-            super._burn(_msgSender(), burnerFee);
-        }
+
         return true;
     }
 
@@ -113,19 +121,22 @@ contract GanjesToken is ERC20, Ownable {
         address recipient,
         uint256 amount
     ) public virtual override returns (bool) {
-        uint256 fee = (amount * transactionFeePercent) / 100;
+        uint256 fee = isFeeActive ? (amount * transactionFeePercent) / 100 : 0;
         uint256 liquidityFee = (fee * liquidityFeePercent) / 100;
         uint256 burnerFee = (fee * (100 - liquidityFeePercent)) / 100;
         uint256 transferAmount = amount - fee;
 
         super.transferFrom(sender, recipient, transferAmount);
 
-        if (liquidityFee > 0) {
-            super._transfer(sender, liquidityWallet, liquidityFee);
+        if (isFeeActive) {
+            if (liquidityFee > 0) {
+                super._transfer(sender, liquidityWallet, liquidityFee);
+            }
+            if (burnerFee > 0 && isFeeActive) {
+                super._burn(sender, burnerFee);
+            }
         }
-        if (burnerFee > 0) {
-            super._burn(sender, burnerFee);
-        }
+
         return true;
     }
 
@@ -135,19 +146,34 @@ contract GanjesToken is ERC20, Ownable {
         bool isAdvisor = address(advisorsVestingWallets[caller]) != address(0);
 
         require(isTeamMember || isAdvisor, "Not eligible to claim");
-        
 
         if (isTeamMember) {
-            require(teamVestingWallets[caller].start()<=block.timestamp, "Vesting Hasn't Started");
-            require(teamVestingWallets[caller].releasable(address(this))>0, "No Tokens Left to release");
+            require(
+                teamVestingWallets[caller].start() <= block.timestamp,
+                "Vesting Hasn't Started"
+            );
+            require(
+                teamVestingWallets[caller].releasable(address(this)) > 0,
+                "No Tokens Left to release"
+            );
             teamVestingWallets[caller].release(address(this));
-        } 
-        if (isAdvisor){
+        }
+        if (isAdvisor) {
             // isAdvisor must be true here
-            require(advisorsVestingWallets[caller].start()<=block.timestamp, "Vesting Hasn't Started");
-            require(advisorsVestingWallets[caller].releasable(address(this))>0, "No Tokens Left to release");
+            require(
+                advisorsVestingWallets[caller].start() <= block.timestamp,
+                "Vesting Hasn't Started"
+            );
+            require(
+                advisorsVestingWallets[caller].releasable(address(this)) > 0,
+                "No Tokens Left to release"
+            );
             advisorsVestingWallets[caller].release(address(this));
         }
+    }
+
+    function toggleFeeMechanism() public onlyOwner {
+        isFeeActive = !isFeeActive;
     }
 
     // receive() external payable {}
@@ -158,4 +184,3 @@ contract GanjesToken is ERC20, Ownable {
     //     payable(owner()).transfer(amount);
     // }
 }
-
